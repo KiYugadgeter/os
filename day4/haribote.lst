@@ -1,0 +1,148 @@
+     1                                  ; haribote-os boot asm
+     2                                  ; TAB=4
+     3                                  
+     4                                  botpak	equ		0X00280000		; BOOTPACKのロード先
+     5                                  dskcac	equ		0X00100000		; ディスクキャッシュの場所
+     6                                  dskcac0	equ		0X00008000		; ディスクキャッシュの場所（リアルモード）
+     7                                  
+     8                                  ; boot_info関係
+     9                                  cyls	equ		0X0FF0			; ブートセクタが設定する
+    10                                  leds	equ		0X0FF1
+    11                                  vmode	equ		0X0FF2			; 色数に関する情報。何ビットカラーか？
+    12                                  scrnx	equ		0X0FF4			; 解像度のx
+    13                                  scrny	equ		0X0FF6			; 解像度のy
+    14                                  vram	equ		0X0FF8			; グラフィックバッファの開始番地
+    15                                  
+    16                                  		org		0XC200			; このプログラムがどこに読み込まれるのか
+    17                                  
+    18                                  ; 画面モードを設定
+    19                                  
+    20 00000000 B013                    		mov		al,0X13			; vgaグラフィックス、320X200X8BITカラー
+    21 00000002 B400                    		mov		ah,0X00
+    22 00000004 CD10                    		int		0X10
+    23 00000006 C606F20F08              		mov		byte [vmode],8	; 画面モードをメモする（c言語が参照する）
+    24 0000000B C706F40F4001            		mov		word [scrnx],320
+    25 00000011 C706F60FC800            		mov		word [scrny],200
+    26 00000017 66C706F80F00000A00      		mov		dword [vram],0X000A0000
+    27                                  
+    28                                  ; キーボードのled状態をbiosに教えてもらう
+    29                                  
+    30 00000020 B402                    		mov		ah,0X02
+    31 00000022 CD16                    		int		0X16 			; KEYBOARD bios
+    32 00000024 A2F10F                  		mov		[leds],al
+    33                                  
+    34                                  ; picが一切の割り込みを受け付けないようにする
+    35                                  ;	at互換機の仕様では、picの初期化をするなら、
+    36                                  ;	こいつをcli前にやっておかないと、たまにハングアップする
+    37                                  ;	picの初期化はあとでやる
+    38                                  
+    39 00000027 B0FF                    		mov		al,0XFF
+    40 00000029 E621                    		out		0X21,al
+    41 0000002B 90                      		nop						; out命令を連続させるとうまくいかない機種があるらしいので
+    42 0000002C E6A1                    		out		0XA1,al
+    43                                  
+    44 0000002E FA                      		cli						; さらにcpuレベルでも割り込み禁止
+    45                                  
+    46                                  ; cpuから1mb以上のメモリにアクセスできるように、a20gateを設定
+    47                                  
+    48 0000002F E8B500                  		call	WAITKBDOUT
+    49 00000032 B0D1                    		mov		al,0XD1
+    50 00000034 E664                    		out		0X64,al
+    51 00000036 E8AE00                  		call	WAITKBDOUT
+    52 00000039 B0DF                    		mov		al,0XDF			; ENABLE a20
+    53 0000003B E660                    		out		0X60,al
+    54 0000003D E8A700                  		call	WAITKBDOUT
+    55                                  
+    56                                  ; プロテクトモード移行
+    57                                  
+    58                                  ;[instrset "I486P"]				; 486の命令まで使いたいという記述
+    59                                  
+    60 00000040 0F0116[2B01]            		lgdt	[gdtr0]			; 暫定gdtを設定
+    61 00000045 0F20C0                  		mov		eax,cr0
+    62 00000048 6625FFFFFF7F            		and		eax,0X7FFFFFFF	; BIT31を0にする（ページング禁止のため）
+    63 0000004E 6683C801                		or		eax,0X00000001	; BIT0を1にする（プロテクトモード移行のため）
+    64 00000052 0F22C0                  		mov		cr0,eax
+    65 00000055 EB00                    		jmp		PIPELINEFLUSH
+    66                                  PIPELINEFLUSH:
+    67 00000057 B80800                  		mov		ax,1*8			;  読み書き可能セグメント32BIT
+    68 0000005A 8ED8                    		mov		ds,ax
+    69 0000005C 8EC0                    		mov		es,ax
+    70 0000005E 8EE0                    		mov		fs,ax
+    71 00000060 8EE8                    		mov		gs,ax
+    72 00000062 8ED0                    		mov		ss,ax
+    73                                  
+    74                                  ; BOOTPACKの転送
+    75                                  
+    76 00000064 66BE[41010000]          		mov		esi,BOOTPACK	; 転送元
+    77 0000006A 66BF00002800            		mov		edi,botpak		; 転送先
+    78 00000070 66B900000200            		mov		ecx,512*1024/4
+    79 00000076 E87500                  		call	MEMCPY
+    80                                  
+    81                                  ; ついでにディスクデータも本来の位置へ転送
+    82                                  
+    83                                  ; まずはブートセクタから
+    84                                  
+    85 00000079 66BE007C0000            		mov		esi,0X7C00		; 転送元
+    86 0000007F 66BF00001000            		mov		edi,dskcac		; 転送先
+    87 00000085 66B980000000            		mov		ecx,512/4
+    88 0000008B E86000                  		call	MEMCPY
+    89                                  
+    90                                  ; 残り全部
+    91                                  
+    92 0000008E 66BE00820000            		mov		esi,dskcac0+512	; 転送元
+    93 00000094 66BF00021000            		mov		edi,dskcac+512	; 転送先
+    94 0000009A 66B900000000            		mov		ecx,0
+    95 000000A0 8A0EF00F                		mov		cl,byte [cyls]
+    96 000000A4 6669C900120000          		imul	ecx,512*18*2/4	; シリンダ数からバイト数/4に変換
+    97 000000AB 6681E980000000          		sub		ecx,512/4		; iplの分だけ差し引く
+    98 000000B2 E83900                  		call	MEMCPY
+    99                                  
+   100                                  ; ASMHEADでしなければいけないことは全部し終わったので、
+   101                                  ;	あとはBOOTPACKに任せる
+   102                                  
+   103                                  ; BOOTPACKの起動
+   104                                  
+   105 000000B5 66BB00002800            		mov		ebx,botpak
+   106 000000BB 66678B4B10              		mov		ecx,[ebx+16]
+   107 000000C0 6683C103                		add		ecx,3			; ecx += 3;
+   108 000000C4 66C1E902                		shr		ecx,2			; ecx /= 4;
+   109 000000C8 7410                    		jz		SKIP			; 転送するべきものがない
+   110 000000CA 66678B7314              		mov		esi,[ebx+20]	; 転送元
+   111 000000CF 6601DE                  		add		esi,ebx
+   112 000000D2 66678B7B0C              		mov		edi,[ebx+12]	; 転送先
+   113 000000D7 E81400                  		call	MEMCPY
+   114                                  SKIP:
+   115 000000DA 66678B630C              		mov		esp,[ebx+12]	; スタック初期値
+   116 000000DF 66EA1B0000001000        		jmp		dword 2*8:0X0000001B
+   117                                  
+   118                                  WAITKBDOUT:
+   119 000000E7 E464                    		in		 al,0X64
+   120 000000E9 2402                    		and		 al,0X02
+   121 000000EB 75FA                    		jnz		WAITKBDOUT		; andの結果が0でなければWAITKBDOUTへ
+   122 000000ED C3                      		ret
+   123                                  
+   124                                  MEMCPY:
+   125 000000EE 66678B06                		mov		eax,[esi]
+   126 000000F2 6683C604                		add		esi,4
+   127 000000F6 66678907                		mov		[edi],eax
+   128 000000FA 6683C704                		add		edi,4
+   129 000000FE 6683E901                		sub		ecx,1
+   130 00000102 75EA                    		jnz		MEMCPY			; 引き算した結果が0でなければMEMCPYへ
+   131 00000104 C3                      		ret
+   132                                  ; MEMCPYはアドレスサイズプリフィクスを入れ忘れなければ、ストリング命令でも書ける
+   133                                  
+   134 00000105 90<rept>                		align	16
+   135 00000110 00                      		db	0
+   136                                  gdt0:
+   137 00000111 00<rept>                		times	8 db	0				; ヌルセレクタ
+   138 00000119 FFFF00000092CF00        		dw		0XFFFF,0X0000,0X9200,0X00CF	; 読み書き可能セグメント32BIT
+   139 00000121 FFFF0000289A4700        		dw		0XFFFF,0X0000,0X9A28,0X0047	; 実行可能セグメント32BIT（BOOTPACK用）
+   140                                  
+   141 00000129 0000                    		dw		0
+   142                                  gdtr0:
+   143 0000012B 1700                    		dw		8*3-1
+   144 0000012D [11010000]              		dd		gdt0
+   145                                  
+   146 00000131 90<rept>                		align	16
+   147 00000140 00                      		db	0
+   148                                  BOOTPACK:

@@ -1,0 +1,6 @@
+*.o
+*.bin
+*.img
+*.sys
+font2byte
+hankaku.c
