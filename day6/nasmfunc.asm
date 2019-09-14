@@ -11,9 +11,11 @@ global io_load_eflags
 global load_gdtr
 global load_idtr
 global asm_inthandler21
+global asm_inthandler27
 global asm_inthandler2c
 
 extern	inthandler21
+extern	inthandler27
 extern	inthandler2c
 
 
@@ -109,6 +111,23 @@ asm_inthandler21:
 	pop	ds
 	pop es
 	iretd
+
+asm_inthandler27:
+	push es
+	push ds
+	pushad
+	mov	eax,esp
+	push	eax
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,ax
+	call	inthandler27
+	pop	eax
+	popad
+	pop	ds
+	pop es
+	iretd
+
 
 asm_inthandler2c:
 	push es

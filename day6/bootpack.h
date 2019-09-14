@@ -17,6 +17,7 @@ extern void io_store_eflags(int eflags);
 extern void load_gdtr(int limit, int addr);
 extern void load_idtr(int limit, int addr);
 extern void asm_inthandler21();
+extern void asm_inthandler27();
 extern void asm_inthandler2c();
 
 //mysprintf.c

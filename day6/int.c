@@ -11,7 +11,7 @@ void init_pic() {
 
     io_out8(PIC1_ICW1, 0x11); //エッジトリガモード
     io_out8(PIC1_ICW2, 0x28); //IRQ8-15は、INT28-2fで受ける
-    io_out8(PIC1_ICW3, 1 << 2); //PIC1はIRQ2にて接続
+    io_out8(PIC1_ICW3, 1 << 1); //PIC1はIRQ2にて接続
     io_out8(PIC1_ICW4, 0x01); //ノンバッファモード
 
     io_out8(PIC0_IMR, 0xfb); //11111011 PIC1以外はすべて禁止
@@ -25,6 +25,10 @@ void inthandler21(int *esp) {
     for (;;) {
         io_hlt();
     }
+}
+
+void inthandler27(int *esp) {
+    io_out8(PIC0_OCW2, 0x67);
 }
 
 void inthandler2c(int *esp) {

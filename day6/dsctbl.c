@@ -15,6 +15,7 @@ void init_gdtidt() {
     }
     load_idtr(LIMIT_IDT, ADR_IDT);
 	set_gatedesc(idt + 0x21, (int) asm_inthandler21, 2 << 3, AR_INTGATE32);
+    set_gatedesc(idt + 0x27, (int) asm_inthandler27, 2 << 3, AR_INTGATE32);
 	set_gatedesc(idt + 0x2c, (int) asm_inthandler2c, 2 << 3, AR_INTGATE32);
 }
 
@@ -25,7 +26,9 @@ void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, i
     }
     sd->limit_low = limit & 0xffff;
     sd->base_low = base & 0xffff;
-    sd->base_mid = (base >> 16) & 0xff | ((ar >> 8 & 0xf0));
+    sd->base_mid = (base >> 16) & 0xff;
+    sd->access_right = ar & 0xff;
+    sd->limit_high = ((limit >> 16) & 0x0f) | ((ar >> 8) & 0xf0);
     sd->base_high = (base >> 24 ) & 0xff;
 }
 
